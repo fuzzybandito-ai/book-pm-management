@@ -29,19 +29,9 @@ export default function App() {
   const [savingGoal, setSavingGoal] = useState(false);
   const isMobile = useMediaQuery('(max-width:600px)');
 
-  // ---- Auth gate ----
-  if (authLoading) {
-    return (
-      <Box sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <CircularProgress />
-      </Box>
-    );
-  }
-  if (!user) {
-    return <Auth onSignIn={signIn} onSignUp={signUp} />;
-  }
-
   // ---- Workout submit (add or update) ----
+  // All hooks must run before any early return, otherwise React detects a
+  // changing hook count between renders and crashes.
   const handleLogSubmit = useCallback(
     async (payload) => {
       if (payload.id) {
@@ -98,6 +88,18 @@ export default function App() {
   }, [remove]);
 
   const dataLoading = workoutsLoading || goalLoading;
+
+  // ---- Auth gate (after all hooks so hook count is stable) ----
+  if (authLoading) {
+    return (
+      <Box sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+  if (!user) {
+    return <Auth onSignIn={signIn} onSignUp={signUp} />;
+  }
 
   return (
     <Box
