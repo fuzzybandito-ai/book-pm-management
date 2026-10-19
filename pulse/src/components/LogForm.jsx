@@ -96,6 +96,21 @@ export default function LogForm({ onSubmit, editEntry = null, onCancel }) {
       return;
     }
 
+    if (!datetime) {
+      setError('Please choose a date and time for your workout.');
+      return;
+    }
+    const chosen = new Date(datetime);
+    if (isNaN(chosen.getTime())) {
+      setError('That date doesn\u2019t look valid. Please pick a real date and time.');
+      return;
+    }
+    const now = new Date();
+    if (chosen < now) {
+      setError('You can\u2019t log a workout in the past. Choose a current or future date and time.');
+      return;
+    }
+
     setSubmitted(true);
     setError(null);
 
@@ -105,7 +120,7 @@ export default function LogForm({ onSubmit, editEntry = null, onCancel }) {
       duration_min: dur,
       intensity: intensity || null,
       note: note.trim() || null,
-      completed_at: new Date(datetime).toISOString(),
+      completed_at: chosen.toISOString(),
     };
     if (editEntry) entry.id = editEntry.id;
 
@@ -289,6 +304,7 @@ export default function LogForm({ onSubmit, editEntry = null, onCancel }) {
             fullWidth
             id="log-datetime-input"
             slotProps={{ inputLabel: { shrink: true } }}
+            helperText="Pick a current or future date and time — past dates aren't allowed."
           />
 
           {error && (
