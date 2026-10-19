@@ -10,9 +10,7 @@
  * which loads `.env.yorku` (VITE_BRAND=yorku). A plain `npm run dev` / `build`
  * has no VITE_BRAND set and therefore renders Pulse, unchanged.
  *
- * Only branding differs between the two — colors and the product name. There
- * are no feature or data differences. The localStorage key is intentionally
- * shared (see useEntries.js) and is NOT branded.
+ * Only branding differs between the two — colors and the product name.
  */
 
 const BRANDS = {

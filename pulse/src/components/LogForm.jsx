@@ -5,134 +5,124 @@ import CardContent from '@mui/material/CardContent';
 import Typography from '@mui/material/Typography';
 import TextField from '@mui/material/TextField';
 import Button from '@mui/material/Button';
-import ButtonGroup from '@mui/material/ButtonGroup';
 import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Chip from '@mui/material/Chip';
-import RestaurantIcon from '@mui/icons-material/Restaurant';
-import DirectionsWalkIcon from '@mui/icons-material/DirectionsWalk';
-import WaterDropIcon from '@mui/icons-material/WaterDrop';
-import BedtimeIcon from '@mui/icons-material/Bedtime';
+import Alert from '@mui/material/Alert';
 import CheckIcon from '@mui/icons-material/Check';
 import { tokens } from '../theme';
-
-const TYPES = [
-  { value: 'food', label: 'Food', icon: <RestaurantIcon />, unit: 'kcal', placeholder: 'e.g. 450' },
-  { value: 'steps', label: 'Steps', icon: <DirectionsWalkIcon />, unit: 'steps', placeholder: 'e.g. 8000' },
-  { value: 'water', label: 'Water', icon: <WaterDropIcon />, unit: 'ml', placeholder: 'e.g. 250' },
-  { value: 'sleep', label: 'Sleep', icon: <BedtimeIcon />, unit: 'hours', placeholder: 'e.g. 7.5' },
-];
-
-const WATER_PRESETS = [250, 350, 500, 750];
+import { KINDS, ACTIVITY_PRESETS, INTENSITY_OPTIONS } from '../data/fitness';
 
 /**
- * Form to add or edit a health entry.
- * Props:
- *   onSubmit    – called with the entry data ({ type, value, unit, note, timestamp })
- *   editEntry   – if provided, the form pre-fills for editing
- *   onCancel    – called when editing is cancelled
+ * LogForm — add or edit a workout. On submit the parent persists to Supabase;
+ * a success state gives immediate visual feedback (PRD: "Receive immediate
+ * feedback after logging a workout"). Multiple workouts per day are allowed —
+ * no date is blocked.
  */
-export default function LogForm({ onSubmit, editEntry = null, onCancel }) {
-  const [type, setType] = useState('food');
-  const [value, setValue] = useState('');
+export default function LogForm({ onSubmit, editEntry, onCancel }) {
+  const [kind, setKind] = useState('solo');
+  const [activity, setActivity] = useState('');
+  const [durationMin, setDurationMin] = useState('');
+  const [intensity, setIntensity] = useState('');
   const [note, setNote] = useState('');
   const [datetime, setDatetime] = useState('');
   const [submitted, setSubmitted] = useState(false);
+  const [error, setError] = useState(null);
+  const [busy, setBusy] = useState(false);
 
-  // Pre-fill for editing
   useEffect(() => {
     if (editEntry) {
-      setType(editEntry.type);
-      setValue(String(editEntry.value));
+      setKind(editEntry.kind || 'solo');
+      setActivity(editEntry.activity || '');
+      setDurationMin(editEntry.duration_min != null ? String(editEntry.duration_min) : '');
+      setIntensity(editEntry.intensity || '');
       setNote(editEntry.note || '');
-      // Convert ISO to datetime-local format
-      const d = new Date(editEntry.timestamp);
-      const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000)
-        .toISOString()
-        .slice(0, 16);
-      setDatetime(local);
+      setDatetime(toLocalInput(editEntry.completed_at));
     } else {
       resetForm();
     }
   }, [editEntry]);
 
-  function resetForm() {
-    setValue('');
-    setNote('');
-    setSubmitted(false);
-    // Default datetime to now in local timezone
-    const now = new Date();
-    const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000)
-      .toISOString()
-      .slice(0, 16);
-    setDatetime(local);
-  }
-
-  // Reset datetime on mount
   useEffect(() => {
     if (!editEntry) resetForm();
   }, []);
 
-  const currentType = TYPES.find((t) => t.value === type);
+  function resetForm() {
+    setKind('solo');
+    setActivity('');
+    setDurationMin('');
+    setIntensity('');
+    setNote('');
+    setSubmitted(false);
+    setError(null);
+    setDatetime(toLocalInput(new Date().toISOString()));
+  }
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
-    const numValue = parseFloat(value);
-    if (isNaN(numValue) || numValue <= 0) return;
-
-    const entry = {
-      type,
-      value: numValue,
-      unit: currentType.unit,
-      note: note.trim(),
-      timestamp: new Date(datetime).toISOString(),
-    };
-
-    if (editEntry) {
-      entry.id = editEntry.id;
+    if (!activity.trim()) {
+      setError('Tell us what you did — pick an activity or type your own.');
+      return;
+    }
+    const parsedDuration = durationMin === '' ? null : parseInt(durationMin, 10);
+    if (parsedDuration !== null && (isNaN(parsedDuration) || parsedDuration <= 0)) {
+      setError('Duration must be a positive number of minutes.');
+      return;
     }
 
-    onSubmit(entry);
-    setSubmitted(true);
+    const payload = {
+      kind,
+      activity: activity.trim(),
+      durationMin: parsedDuration,
+      intensity: intensity || null,
+      note: note.trim() || null,
+      completedAt: new Date(datetime).toISOString(),
+    };
+    if (editEntry) payload.id = editEntry.id;
 
-    // Show success briefly, then reset
+    setBusy(true);
+    setError(null);
+    const result = await onSubmit(payload);
+    setBusy(false);
+    if (result && result.error) {
+      setError(result.error.message || 'Could not save the workout. Please try again.');
+      return;
+    }
+    setSubmitted(true);
     setTimeout(() => {
       resetForm();
-      setType('food');
     }, 1200);
   }
 
-  function handleWaterPreset(amount) {
-    setType('water');
-    setValue(String(amount));
-  }
-
   return (
-    <Box sx={{ maxWidth: 520, mx: 'auto', px: 2, py: 3 }}>
-      <Typography variant="h5" sx={{ mb: 3, fontSize: '1.2rem' }}>
-        {editEntry ? 'Edit Entry' : 'Log Entry'}
+    <Box sx={{ maxWidth: 560, mx: 'auto', px: 2, py: 3 }}>
+      <Typography variant="h5" sx={{ mb: 0.5, fontSize: '1.2rem' }}>
+        {editEntry ? 'Edit Workout' : 'Log a Workout'}
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+        Every workout counts. Log what you did and watch your streak grow.
       </Typography>
 
       <Card>
         <CardContent component="form" onSubmit={handleSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
-          {/* Type selector */}
+          {/* Kind: solo or group class */}
           <Box>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
               Type
             </Typography>
             <ToggleButtonGroup
-              value={type}
+              value={kind}
               exclusive
-              onChange={(_, v) => v && setType(v)}
+              onChange={(_, v) => v && setKind(v)}
               fullWidth
               size="small"
-              aria-label="Entry type"
+              aria-label="Workout type"
             >
-              {TYPES.map((t) => (
+              {KINDS.map((k) => (
                 <ToggleButton
-                  key={t.value}
-                  value={t.value}
-                  id={`log-type-${t.value}`}
+                  key={k.value}
+                  value={k.value}
+                  id={`log-kind-${k.value}`}
                   sx={{
                     gap: 0.5,
                     textTransform: 'uppercase',
@@ -146,59 +136,109 @@ export default function LogForm({ onSubmit, editEntry = null, onCancel }) {
                     },
                   }}
                 >
-                  {t.icon}
-                  {t.label}
+                  {k.icon}
+                  {k.label}
                 </ToggleButton>
               ))}
             </ToggleButtonGroup>
           </Box>
 
-          {/* Water quick presets */}
-          {type === 'water' && (
-            <Box>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                Quick presets
-              </Typography>
-              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                {WATER_PRESETS.map((amount) => (
-                  <Chip
-                    key={amount}
-                    label={`${amount} ml`}
-                    onClick={() => handleWaterPreset(amount)}
-                    variant={value === String(amount) ? 'filled' : 'outlined'}
-                    color="primary"
-                    sx={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 600 }}
-                    id={`water-preset-${amount}`}
-                  />
-                ))}
-              </Box>
+          {/* Activity presets */}
+          <Box>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+              Quick pick
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+              {ACTIVITY_PRESETS.filter((p) => p.kind === kind).map((p) => (
+                <Chip
+                  key={p.activity}
+                  label={p.activity}
+                  onClick={() => setActivity(p.activity)}
+                  variant={activity === p.activity ? 'filled' : 'outlined'}
+                  color="primary"
+                  icon={p.icon}
+                  sx={{
+                    fontFamily: '"Space Grotesk", sans-serif',
+                    fontWeight: 600,
+                    fontSize: '0.72rem',
+                  }}
+                  id={`log-preset-${p.activity.replace(/\s+/g, '-').toLowerCase()}`}
+                />
+              ))}
             </Box>
-          )}
+          </Box>
 
-          {/* Value input */}
+          {/* Activity text (preset or custom) */}
           <TextField
-            label={`Value (${currentType.unit})`}
-            type="number"
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            placeholder={currentType.placeholder}
+            label="Activity"
+            value={activity}
+            onChange={(e) => setActivity(e.target.value)}
+            placeholder="e.g. Treadmill run"
             required
             fullWidth
-            inputProps={{ min: 0, step: type === 'sleep' ? 0.1 : 1 }}
-            id="log-value-input"
+            id="log-activity-input"
           />
 
-          {/* Note input (most useful for food) */}
+          {/* Duration + intensity row */}
+          <Box sx={{ display: 'flex', gap: 2, flexWrap: { xs: 'wrap', sm: 'nowrap' } }}>
+            <TextField
+              label="Duration (min)"
+              type="number"
+              value={durationMin}
+              onChange={(e) => setDurationMin(e.target.value)}
+              placeholder="e.g. 30"
+              fullWidth
+              inputProps={{ min: 0 }}
+              id="log-duration-input"
+            />
+            <Box sx={{ flex: '1 1 160px' }}>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                Intensity
+              </Typography>
+              <ToggleButtonGroup
+                value={intensity}
+                exclusive
+                onChange={(_, v) => v && setIntensity(v)}
+                size="small"
+                fullWidth
+                aria-label="Intensity"
+              >
+                {INTENSITY_OPTIONS.map((o) => (
+                  <ToggleButton
+                    key={o.value}
+                    value={o.value}
+                    id={`log-intensity-${o.value}`}
+                    sx={{
+                      fontSize: '0.7rem',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.06em',
+                      fontFamily: '"Space Grotesk", sans-serif',
+                      '&.Mui-selected': {
+                        backgroundColor: tokens.accentDim15,
+                        color: tokens.violetBright,
+                      },
+                    }}
+                  >
+                    {o.label}
+                  </ToggleButton>
+                ))}
+              </ToggleButtonGroup>
+            </Box>
+          </Box>
+
+          {/* Note */}
           <TextField
             label="Note (optional)"
             value={note}
             onChange={(e) => setNote(e.target.value)}
-            placeholder={type === 'food' ? 'e.g. Grilled chicken salad' : 'Optional note'}
+            placeholder="How did it feel?"
             fullWidth
+            multiline
+            maxRows={3}
             id="log-note-input"
           />
 
-          {/* Date/time picker */}
+          {/* Date/time */}
           <TextField
             label="Date & time"
             type="datetime-local"
@@ -206,10 +246,10 @@ export default function LogForm({ onSubmit, editEntry = null, onCancel }) {
             onChange={(e) => setDatetime(e.target.value)}
             fullWidth
             id="log-datetime-input"
-            slotProps={{
-              inputLabel: { shrink: true },
-            }}
+            slotProps={{ inputLabel: { shrink: true } }}
           />
+
+          {error && <Alert severity="error" id="log-error">{error}</Alert>}
 
           {/* Actions */}
           <Box sx={{ display: 'flex', gap: 1.5, mt: 1 }}>
@@ -218,11 +258,11 @@ export default function LogForm({ onSubmit, editEntry = null, onCancel }) {
               variant="contained"
               size="large"
               fullWidth
-              disabled={submitted}
+              disabled={submitted || busy}
               startIcon={submitted ? <CheckIcon /> : null}
               id="log-submit-button"
             >
-              {submitted ? 'Logged!' : editEntry ? 'Save changes' : 'Log entry'}
+              {submitted ? 'Logged!' : editEntry ? 'Save changes' : 'Log workout'}
             </Button>
             {editEntry && onCancel && (
               <Button
@@ -239,4 +279,12 @@ export default function LogForm({ onSubmit, editEntry = null, onCancel }) {
       </Card>
     </Box>
   );
+}
+
+function toLocalInput(iso) {
+  const d = new Date(iso);
+  const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000)
+    .toISOString()
+    .slice(0, 16);
+  return local;
 }

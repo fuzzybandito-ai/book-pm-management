@@ -1,11 +1,9 @@
-import React, { useState, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import IconButton from '@mui/material/IconButton';
-import ToggleButton from '@mui/material/ToggleButton';
-import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
 import ListItemText from '@mui/material/ListItemText';
@@ -14,86 +12,57 @@ import Chip from '@mui/material/Chip';
 import Divider from '@mui/material/Divider';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
-import RestaurantIcon from '@mui/icons-material/Restaurant';
-import DirectionsWalkIcon from '@mui/icons-material/DirectionsWalk';
-import WaterDropIcon from '@mui/icons-material/WaterDrop';
-import BedtimeIcon from '@mui/icons-material/Bedtime';
-import TimelineIcon from '@mui/icons-material/Timeline';
-import TrendChart from './TrendChart';
+import FitnessCenterIcon from '@mui/icons-material/FitnessCenter';
+import DirectionsRunIcon from '@mui/icons-material/DirectionsRun';
+import GroupIcon from '@mui/icons-material/Group';
+import SelfImprovementIcon from '@mui/icons-material/SelfImprovement';
+import AccessibilityNewIcon from '@mui/icons-material/AccessibilityNew';
+import SportsIcon from '@mui/icons-material/Sports';
+import HistoryIcon from '@mui/icons-material/History';
 import { tokens } from '../theme';
+import { KIND_LABELS } from '../data/fitness';
+import { dayKey } from '../lib/dates';
 
-const TYPE_ICONS = {
-  food: RestaurantIcon,
-  steps: DirectionsWalkIcon,
-  water: WaterDropIcon,
-  sleep: BedtimeIcon,
+const KIND_ICONS = {
+  solo: DirectionsRunIcon,
+  group: GroupIcon,
 };
 
-const TYPE_LABELS = {
-  food: 'Food',
-  steps: 'Steps',
-  water: 'Water',
-  sleep: 'Sleep',
+const ACTIVITY_ICON_HINT = {
+  'Treadmill run': DirectionsRunIcon,
+  'Weight training': FitnessCenterIcon,
+  'Swimming laps': SelfImprovementIcon,
+  'Stretching & mobility': AccessibilityNewIcon,
+  'York Lions group fitness': GroupIcon,
+  'Intramural game': SportsIcon,
 };
 
-const TYPE_UNITS = {
-  food: 'kcal',
-  steps: 'steps',
-  water: 'ml',
-  sleep: 'hours',
+const INTENSITY_COLORS = {
+  easy: '#4ADE80',
+  moderate: '#FBBF24',
+  hard: '#FF3B54',
 };
 
 /**
- * History screen: filterable entry list with edit/delete, plus full per-metric chart.
+ * History — chronological list of the user's own workouts with edit/delete.
+ * Multiple workouts on the same day are shown as separate entries (never
+ * hidden). Empty state included.
  */
-export default function History({ entries, onEdit, onDelete }) {
-  const [filter, setFilter] = useState('all');
-  const [chartType, setChartType] = useState('food');
+export default function History({ workouts, onEdit, onDelete }) {
+  const sorted = useMemo(
+    () => [...workouts].sort((a, b) => new Date(b.completed_at) - new Date(a.completed_at)),
+    [workouts]
+  );
 
-  // Filter entries
-  const filtered = useMemo(() => {
-    const list = filter === 'all' ? entries : entries.filter((e) => e.type === filter);
-    return [...list].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-  }, [entries, filter]);
-
-  // Aggregate data for the full chart (sum per day, or hours for sleep)
-  const chartData = useMemo(() => {
-    const byDay = {};
-    entries
-      .filter((e) => e.type === chartType)
-      .forEach((e) => {
-        const day = new Date(e.timestamp).toLocaleDateString('en-CA'); // YYYY-MM-DD
-        byDay[day] = (byDay[day] || 0) + e.value;
-      });
-
-    return Object.entries(byDay)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([date, value]) => ({
-        date: new Date(date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        value: Math.round(value * 10) / 10,
-      }));
-  }, [entries, chartType]);
-
-  function formatTime(iso) {
-    const d = new Date(iso);
-    return d.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-    });
-  }
-
-  // Empty state
-  if (entries.length === 0) {
+  if (workouts.length === 0) {
     return (
       <Box sx={{ textAlign: 'center', py: 8, px: 3 }}>
-        <TimelineIcon sx={{ fontSize: 64, color: 'primary.light', opacity: 0.4, mb: 2 }} />
+        <HistoryIcon sx={{ fontSize: 64, color: 'primary.light', opacity: 0.4, mb: 2 }} />
         <Typography variant="h5" sx={{ mb: 1, fontSize: '1.1rem' }}>
-          Start tracking to see your history
+          No workouts yet
         </Typography>
-        <Typography variant="body2" color="text.secondary">
-          Log your first entry — food, steps, water, or sleep — and it will appear here with charts showing your trends over time.
+        <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 380, mx: 'auto', lineHeight: 1.6 }}>
+          Your logged workouts will appear here. Log your first one from the dashboard or the Log tab.
         </Typography>
       </Box>
     );
@@ -101,89 +70,32 @@ export default function History({ entries, onEdit, onDelete }) {
 
   return (
     <Box sx={{ maxWidth: 720, mx: 'auto', px: 2, py: 3 }}>
-      {/* Per-metric chart */}
-      <Card sx={{ mb: 3 }}>
-        <CardContent>
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2, flexWrap: 'wrap', gap: 1 }}>
-            <Typography variant="h6" sx={{ fontSize: '0.85rem' }}>
-              Trends
-            </Typography>
-            <ToggleButtonGroup
-              value={chartType}
-              exclusive
-              onChange={(_, v) => v && setChartType(v)}
-              size="small"
-              aria-label="Chart metric type"
-            >
-              {Object.entries(TYPE_LABELS).map(([key, label]) => (
-                <ToggleButton
-                  key={key}
-                  value={key}
-                  id={`chart-type-${key}`}
-                  sx={{
-                    fontSize: '0.7rem',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.06em',
-                    fontFamily: '"Space Grotesk", sans-serif',
-                    px: 1.5,
-                    '&.Mui-selected': {
-                      backgroundColor: tokens.accentDim15,
-                      color: tokens.violetBright,
-                    },
-                  }}
-                >
-                  {label}
-                </ToggleButton>
-              ))}
-            </ToggleButtonGroup>
-          </Box>
-          <TrendChart
-            data={chartData}
-            label={TYPE_UNITS[chartType]}
-          />
-        </CardContent>
-      </Card>
+      <Typography variant="h5" sx={{ mb: 0.5, fontSize: '1.2rem' }}>
+        Workout History
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+        Every workout you've logged, newest first.
+      </Typography>
 
-      {/* Filter bar */}
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-        <Typography variant="h6" sx={{ fontSize: '0.85rem' }}>
-          All Entries
-        </Typography>
-        <ToggleButtonGroup
-          value={filter}
-          exclusive
-          onChange={(_, v) => v && setFilter(v)}
-          size="small"
-          aria-label="Filter entries by type"
-        >
-          <ToggleButton value="all" id="filter-all" sx={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.06em', fontFamily: '"Space Grotesk", sans-serif', px: 1.5, '&.Mui-selected': { backgroundColor: tokens.accentDim15, color: tokens.violetBright } }}>
-            All
-          </ToggleButton>
-          {Object.entries(TYPE_LABELS).map(([key, label]) => (
-            <ToggleButton key={key} value={key} id={`filter-${key}`} sx={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.06em', fontFamily: '"Space Grotesk", sans-serif', px: 1.5, '&.Mui-selected': { backgroundColor: tokens.accentDim15, color: tokens.violetBright } }}>
-              {label}
-            </ToggleButton>
-          ))}
-        </ToggleButtonGroup>
-      </Box>
-
-      {/* Entry list */}
       <Card>
         <List disablePadding>
-          {filtered.map((entry, idx) => {
-            const Icon = TYPE_ICONS[entry.type];
+          {sorted.map((w, idx) => {
+            const KindIcon = KIND_ICONS[w.kind] || FitnessCenterIcon;
+            const HintIcon = ACTIVITY_ICON_HINT[w.activity];
+            const Icon = HintIcon || KindIcon;
+            const intensityColor = w.intensity ? INTENSITY_COLORS[w.intensity] : null;
             return (
-              <React.Fragment key={entry.id}>
+              <React.Fragment key={w.id}>
                 {idx > 0 && <Divider sx={{ borderColor: tokens.accentDim12 }} />}
                 <ListItem
-                  id={`entry-${entry.id}`}
+                  id={`workout-${w.id}`}
                   secondaryAction={
                     <Box sx={{ display: 'flex', gap: 0.5 }}>
                       <IconButton
                         edge="end"
                         size="small"
-                        onClick={() => onEdit(entry)}
-                        aria-label={`Edit ${TYPE_LABELS[entry.type]} entry`}
+                        onClick={() => onEdit(w)}
+                        aria-label={`Edit ${w.activity} workout`}
                         sx={{ color: 'text.secondary', '&:hover': { color: 'primary.light' } }}
                       >
                         <EditIcon fontSize="small" />
@@ -191,42 +103,70 @@ export default function History({ entries, onEdit, onDelete }) {
                       <IconButton
                         edge="end"
                         size="small"
-                        onClick={() => onDelete(entry.id)}
-                        aria-label={`Delete ${TYPE_LABELS[entry.type]} entry`}
+                        onClick={() => onDelete(w.id)}
+                        aria-label={`Delete ${w.activity} workout`}
                         sx={{ color: 'text.secondary', '&:hover': { color: '#ef4444' } }}
                       >
                         <DeleteIcon fontSize="small" />
                       </IconButton>
                     </Box>
                   }
-                  sx={{ py: 1.5 }}
+                  sx={{ py: 1.5, pr: 11 }}
                 >
                   <ListItemIcon sx={{ minWidth: 40 }}>
-                    <Icon sx={{ color: 'primary.light', fontSize: 20 }} />
+                    <Icon sx={{ color: 'primary.light', fontSize: 22 }} />
                   </ListItemIcon>
                   <ListItemText
                     primary={
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
                         <Typography variant="body1" sx={{ fontWeight: 600 }}>
-                          {entry.value.toLocaleString()} {entry.unit}
+                          {w.activity}
                         </Typography>
-                        {entry.note && (
+                        <Chip
+                          label={KIND_LABELS[w.kind] || w.kind}
+                          size="small"
+                          variant="outlined"
+                          sx={{
+                            fontSize: '0.65rem',
+                            height: 20,
+                            borderColor: tokens.borderViolet,
+                            color: 'text.secondary',
+                          }}
+                        />
+                        {intensityColor && (
                           <Chip
-                            label={entry.note}
+                            label={w.intensity}
                             size="small"
-                            variant="outlined"
                             sx={{
-                              fontSize: '0.7rem',
-                              height: 22,
-                              borderColor: tokens.borderViolet,
-                              color: 'text.secondary',
+                              fontSize: '0.65rem',
+                              height: 20,
+                              backgroundColor: `${intensityColor}22`,
+                              color: intensityColor,
+                              border: `1px solid ${intensityColor}55`,
+                              textTransform: 'capitalize',
+                              fontWeight: 600,
                             }}
                           />
                         )}
                       </Box>
                     }
-                    secondary={formatTime(entry.timestamp)}
-                    secondaryTypographyProps={{ color: 'text.secondary', fontSize: '0.75rem' }}
+                    secondary={
+                      <Box component="span" sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, mt: 0.25 }}>
+                        <Typography component="span" variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
+                          {formatTime(w.completed_at)}
+                        </Typography>
+                        {w.duration_min != null && (
+                          <Typography component="span" variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
+                            {w.duration_min} min
+                          </Typography>
+                        )}
+                        {w.note && (
+                          <Typography component="span" variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem', fontStyle: 'italic' }}>
+                            {w.note}
+                          </Typography>
+                        )}
+                      </Box>
+                    }
                   />
                 </ListItem>
               </React.Fragment>
@@ -236,8 +176,23 @@ export default function History({ entries, onEdit, onDelete }) {
       </Card>
 
       <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', mt: 2 }}>
-        {filtered.length} {filtered.length === 1 ? 'entry' : 'entries'}
+        {workouts.length} {workouts.length === 1 ? 'workout' : 'workouts'} logged
       </Typography>
     </Box>
   );
+}
+
+function formatTime(iso) {
+  const d = new Date(iso);
+  const today = dayKey(new Date());
+  const that = dayKey(d);
+  if (today === that) {
+    return `Today, ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
+  }
+  return d.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
 }
