@@ -13,8 +13,7 @@ import theme from './theme';
 import brand from './brand';
 import App from './App';
 
-// Tab title follows the active brand (Pulse by default).
-document.title = `${brand.name} — Health Tracker`;
+document.title = `${brand.name} — Workout Progress`;
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

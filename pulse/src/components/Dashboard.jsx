@@ -3,89 +3,142 @@ import Box from '@mui/material/Box';
 import Grid from '@mui/material/Grid';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
-import WaterDropIcon from '@mui/icons-material/WaterDrop';
-import MetricCard from './MetricCard';
-
-const METRIC_TYPES = ['food', 'steps', 'water', 'sleep'];
+import AddIcon from '@mui/icons-material/Add';
+import SelfImprovementIcon from '@mui/icons-material/SelfImprovement';
+import GoalForm from './GoalForm';
+import StatCard from './StatCard';
+import {
+  currentStreak,
+  totalWorkouts,
+  weeklyWorkouts,
+  weeklyTrend,
+} from '../lib/fitness';
 
 /**
- * Dashboard screen: four metric cards showing today's totals with mini trends,
- * plus quick-add shortcuts.
+ * Dashboard screen: the user's goal, stat cards (streak, weekly, total), and a
+ * weekly trend chart. Includes a clear empty state when no workouts exist yet.
  */
-export default function Dashboard({ entries, onQuickAdd, onQuickWater }) {
-  // Today's date string for filtering
-  const todayStr = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD
+export default function Dashboard({
+  workouts,
+  goal,
+  onSetGoal,
+  onClearGoal,
+  onLogClick,
+}) {
+  const stats = useMemo(() => {
+    return {
+      streak: currentStreak(workouts),
+      weekly: weeklyWorkouts(workouts),
+      total: totalWorkouts(workouts),
+      trend: weeklyTrend(workouts),
+    };
+  }, [workouts]);
 
-  // Compute today's totals and trend data for each type
-  const metrics = useMemo(() => {
-    return METRIC_TYPES.map((type) => {
-      const typeEntries = entries.filter((e) => e.type === type);
-
-      // Today's total
-      const todayEntries = typeEntries.filter(
-        (e) => new Date(e.timestamp).toLocaleDateString('en-CA') === todayStr
-      );
-      const todayTotal = todayEntries.reduce((sum, e) => sum + e.value, 0);
-
-      // Aggregate by day for trend (last 14 days)
-      const byDay = {};
-      typeEntries.forEach((e) => {
-        const day = new Date(e.timestamp).toLocaleDateString('en-CA');
-        byDay[day] = (byDay[day] || 0) + e.value;
-      });
-
-      // Build trend data for last 14 days (fill gaps with 0)
-      const trendData = [];
-      for (let i = 13; i >= 0; i--) {
-        const d = new Date();
-        d.setDate(d.getDate() - i);
-        const dayStr = d.toLocaleDateString('en-CA');
-        const label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-        trendData.push({
-          date: label,
-          value: byDay[dayStr] ? Math.round(byDay[dayStr] * 10) / 10 : 0,
-        });
-      }
-
-      return {
-        type,
-        todayTotal: Math.round(todayTotal * 10) / 10,
-        trendData,
-      };
-    });
-  }, [entries, todayStr]);
+  const hasWorkouts = workouts.length > 0;
 
   return (
-    <Box sx={{ maxWidth: 900, mx: 'auto', px: 2, py: 3 }}>
+    <Box sx={{ maxWidth: 920, mx: 'auto', px: 2, py: 3 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
         <Typography variant="h5" sx={{ fontSize: '1.2rem' }}>
-          Today
+          Your progress
         </Typography>
         <Button
-          variant="outlined"
+          variant="contained"
           size="small"
-          startIcon={<WaterDropIcon />}
-          onClick={onQuickWater}
-          id="quick-water-button"
-          sx={{ fontSize: '0.75rem' }}
+          startIcon={<AddIcon />}
+          onClick={onLogClick}
+          id="dashboard-log-button"
         >
-          +250 ml
+          Log workout
         </Button>
       </Box>
 
-      {/* Metric cards in a 2×2 grid */}
-      <Grid container spacing={2}>
-        {metrics.map((m) => (
-          <Grid size={{ xs: 6, sm: 6, md: 3 }} key={m.type}>
-            <MetricCard
-              type={m.type}
-              todayTotal={m.todayTotal}
-              trendData={m.trendData}
-              onQuickAdd={() => onQuickAdd(m.type)}
+      {/* Goal — set or displayed */}
+      <GoalForm goal={goal} onSetGoal={onSetGoal} onClearGoal={onClearGoal} />
+
+      {/* Empty state */}
+      {!hasWorkouts && (
+        <Box
+          id="dashboard-empty-state"
+          sx={{
+            textAlign: 'center',
+            py: 6,
+            px: 3,
+            border: `1px dashed ${tokens.borderViolet}`,
+            borderRadius: 3,
+            mb: 3,
+          }}
+        >
+          <SelfImprovementIcon sx={{ fontSize: 56, color: 'primary.light', opacity: 0.5, mb: 2 }} />
+          <Typography variant="h6" sx={{ fontSize: '1rem', mb: 1 }}>
+            No workouts logged yet
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Log your first workout — solo or a campus group class — and your streak, weekly progress, and totals will appear here.
+          </Typography>
+          <Button
+            variant="outlined"
+            startIcon={<AddIcon />}
+            onClick={onLogClick}
+            id="empty-log-button"
+          >
+            Log your first workout
+          </Button>
+        </Box>
+      )}
+
+      {/* Stat cards */}
+      {hasWorkouts && (
+        <Grid container spacing={2} sx={{ mb: 3 }}>
+          <Grid size={{ xs: 6, md: 4 }}>
+            <StatCard
+              id="stat-streak"
+              icon={LocalFireDepartmentIcon}
+              value={`${stats.streak} day${stats.streak === 1 ? '' : 's'}`}
+              label="Current streak"
+              sub={stats.streak === 0 ? 'Log today to start one' : 'Keep it going'}
+              accent="#FBBF24"
             />
           </Grid>
-        ))}
-      </Grid>
+          <Grid size={{ xs: 6, md: 4 }}>
+            <StatCard
+              id="stat-weekly"
+              icon={CalendarWeekIcon}
+              value={stats.weekly}
+              label="This week"
+              sub="Workouts since Monday"
+            />
+          </Grid>
+          <Grid size={{ xs: 12, md: 4 }}>
+            <StatCard
+              id="stat-total"
+              icon={FitnessCenterIcon}
+              value={stats.total}
+              label="Total workouts"
+              sub="All time"
+            />
+          </Grid>
+        </Grid>
+      )}
+
+      {/* Weekly trend chart */}
+      {hasWorkouts && (
+        <Box>
+          <Typography variant="h6" sx={{ fontSize: '0.85rem', mb: 1 }}>
+            Last 7 days
+          </Typography>
+          <Box
+            sx={{
+              backgroundColor: '#14141C',
+              border: `1px solid ${tokens.borderViolet}`,
+              borderRadius: 2,
+              p: 2,
+            }}
+          >
+            <TrendChart data={stats.trend} label="workouts" id="weekly-trend-chart" />
+          </Box>
+        </Box>
+      )}
     </Box>
   );
 }
