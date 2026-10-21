@@ -2,12 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import supabase from '../lib/supabaseClient';
 
 /**
- * useGoal — a user's single active fitness goal (one row per user).
+ * useGoal — the shared single fitness goal (one row for the whole app).
  * Exposes { goal, loading, error, upsert, remove }.
- *
- * The goals table enforces one row per user (UNIQUE on user_id). `upsert`
- * creates or updates that single row. RLS guarantees a user only sees their
- * own goal.
  */
 export default function useGoal() {
   const [goal, setGoal] = useState(null);
@@ -39,14 +35,31 @@ export default function useGoal() {
       is_active: values.isActive ?? true,
       target_days: values.targetDays ?? 3,
     };
-    const { data, error } = await supabase
+    // Single shared goal row. If a row exists, update it; otherwise insert.
+    // We fetch first because there's no user_id to upsert on anymore.
+    const { data: existing } = await supabase
       .from('goals')
-      .upsert(payload, { onConflict: 'user_id' })
-      .select()
+      .select('id')
+      .limit(1)
       .maybeSingle();
-    if (error) return { error };
-    setGoal(data);
-    return { goal: data };
+    let result;
+    if (existing) {
+      result = await supabase
+        .from('goals')
+        .update(payload)
+        .eq('id', existing.id)
+        .select()
+        .maybeSingle();
+    } else {
+      result = await supabase
+        .from('goals')
+        .insert(payload)
+        .select()
+        .maybeSingle();
+    }
+    if (result.error) return { error: result.error };
+    setGoal(result.data);
+    return { goal: result.data };
   }, []);
 
   const remove = useCallback(async () => {

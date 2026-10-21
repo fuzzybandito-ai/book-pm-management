@@ -7,20 +7,16 @@ import Nav from './components/Nav';
 import Dashboard from './components/Dashboard';
 import LogForm from './components/LogForm';
 import History from './components/History';
-import Auth from './components/Auth';
-import useAuth from './hooks/useAuth';
 import useWorkouts from './hooks/useWorkouts';
 import useGoal from './hooks/useGoal';
 import brand from './brand';
 
 /**
  * Root application component.
- * Owns the sign-in gate, view state (Dashboard / Log / History), and the
- * edit flow. Data is per-user via Supabase auth + RLS — no user can see or
- * modify another user's workouts or goal.
+ * Owns view state (Dashboard / Log / History) and the edit flow.
+ * No sign-in — the app is a shared, single-tenant tracker.
  */
 export default function App() {
-  const { user, loading: authLoading, signIn, signUp, signOut } = useAuth();
   const { workouts, loading: workoutsLoading, add, update, remove } = useWorkouts();
   const { goal, loading: goalLoading, upsert } = useGoal();
 
@@ -30,8 +26,6 @@ export default function App() {
   const isMobile = useMediaQuery('(max-width:600px)');
 
   // ---- Workout submit (add or update) ----
-  // All hooks must run before any early return, otherwise React detects a
-  // changing hook count between renders and crashes.
   const handleLogSubmit = useCallback(
     async (payload) => {
       if (payload.id) {
@@ -45,7 +39,7 @@ export default function App() {
       const result = await add(payload);
       if (result.error) return { error: result.error };
       setEditEntry(null);
-      setView(0); // Back to dashboard so the user sees it update
+      setView(0);
       return {};
     },
     [add, update]
@@ -65,10 +59,6 @@ export default function App() {
     setView(1);
   }, []);
 
-  const handleSignOut = useCallback(async () => {
-    await signOut();
-  }, [signOut]);
-
   const handleSaveGoal = useCallback(
     async (values) => {
       setSavingGoal(true);
@@ -82,24 +72,11 @@ export default function App() {
   const handleDelete = useCallback(async (id) => {
     const result = await remove(id);
     if (result.error) {
-      // Surface a simple alert; the list refreshes on success
       console.error('Failed to delete workout:', result.error.message);
     }
   }, [remove]);
 
   const dataLoading = workoutsLoading || goalLoading;
-
-  // ---- Auth gate (after all hooks so hook count is stable) ----
-  if (authLoading) {
-    return (
-      <Box sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <CircularProgress />
-      </Box>
-    );
-  }
-  if (!user) {
-    return <Auth onSignIn={signIn} onSignUp={signUp} />;
-  }
 
   return (
     <Box
@@ -110,12 +87,7 @@ export default function App() {
         flexDirection: 'column',
       }}
     >
-      <Nav
-        view={view}
-        onChangeView={setView}
-        onSignOut={handleSignOut}
-        email={user?.email}
-      />
+      <Nav view={view} onChangeView={setView} />
 
       <Box sx={{ flex: 1 }}>
         {dataLoading ? (
@@ -166,7 +138,7 @@ export default function App() {
           fontSize: '0.85rem',
         }}
       >
-        {brand.name} — campus workout dashboard. Your data is private to you.
+        {brand.name} — campus workout dashboard.
       </Box>
     </Box>
   );
